@@ -87,7 +87,7 @@ Functor (Grammar tok c) where
 ||| with value type `a`. If both succeed, apply the function
 ||| from the first grammar to the value from the second grammar.
 ||| Guaranteed to consume if either grammar consumes.
-export
+export %inline
 (<*>) : Grammar tok c1 (a -> b) ->
         {c2:Bool} ->
         inf c1 (Grammar tok c2 a) ->
@@ -97,7 +97,7 @@ export
 
 ||| Sequence two grammars. If both succeed, use the value of the first one.
 ||| Guaranteed to consume if either grammar consumes.
-export
+export %inline
 (<*) : Grammar tok c1 a ->
        {c2:Bool} ->
        inf c1 (Grammar tok c2 b) ->
@@ -106,7 +106,7 @@ export
 
 ||| Sequence two grammars. If both succeed, use the value of the second one.
 ||| Guaranteed to consume if either grammar consumes.
-export
+export %inline
 (*>) : Grammar tok c1 a ->
        {c2:Bool} ->
        inf c1 (Grammar tok c2 b) ->
