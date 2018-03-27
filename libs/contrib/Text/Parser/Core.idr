@@ -89,6 +89,7 @@ Functor (Grammar tok c) where
 ||| Guaranteed to consume if either grammar consumes.
 export
 (<*>) : Grammar tok c1 (a -> b) ->
+        {c2:Bool} ->
         inf c1 (Grammar tok c2 a) ->
         Grammar tok (c1 || c2) b
 (<*>) {c1 = False} x y = SeqEmpty x (\f => map f y)
@@ -98,6 +99,7 @@ export
 ||| Guaranteed to consume if either grammar consumes.
 export
 (<*) : Grammar tok c1 a ->
+       {c2:Bool} ->
        inf c1 (Grammar tok c2 b) ->
        Grammar tok (c1 || c2) a
 (<*) x y = map const x <*> y
@@ -106,6 +108,7 @@ export
 ||| Guaranteed to consume if either grammar consumes.
 export
 (*>) : Grammar tok c1 a ->
+       {c2:Bool} ->
        inf c1 (Grammar tok c2 b) ->
        Grammar tok (c1 || c2) b
 (*>) x y = map (const id) x <*> y
