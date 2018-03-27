@@ -89,15 +89,16 @@ Functor (Grammar tok c) where
 ||| Guaranteed to consume if either grammar consumes.
 export
 (<*>) : Grammar tok c1 (a -> b) ->
-        Grammar tok c2 a ->
+        inf c1 (Grammar tok c2 a) ->
         Grammar tok (c1 || c2) b
-(<*>) x y = SeqEmpty x (\f => map f y)
+(<*>) {c1 = False} x y = SeqEmpty x (\f => map f y)
+(<*>) {c1 = True } x y = SeqEat   x (\f => map f y)
 
 ||| Sequence two grammars. If both succeed, use the value of the first one.
 ||| Guaranteed to consume if either grammar consumes.
 export
 (<*) : Grammar tok c1 a ->
-       Grammar tok c2 b ->
+       inf c1 (Grammar tok c2 b) ->
        Grammar tok (c1 || c2) a
 (<*) x y = map const x <*> y
 
@@ -105,7 +106,7 @@ export
 ||| Guaranteed to consume if either grammar consumes.
 export
 (*>) : Grammar tok c1 a ->
-       Grammar tok c2 b ->
+       inf c1 (Grammar tok c2 b) ->
        Grammar tok (c1 || c2) b
 (*>) x y = map (const id) x <*> y
 
