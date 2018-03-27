@@ -150,7 +150,7 @@ sepBy1 : {c : Bool} ->
          (p : Grammar tok c a) ->
          Grammar tok c (List a)
 sepBy1 {c} sep p = rewrite sym (orFalseNeutral c) in
-                           [| p :: many (sep *> p) |]
+                           [| p :: delay c (many (sep *> p)) |]
 
 ||| Parse zero or more things, each separated by another thing. May
 ||| match the empty input.
@@ -177,7 +177,7 @@ sepEndBy1 : {c : Bool} ->
             (p : Grammar tok c a) ->
             Grammar tok c (List a)
 sepEndBy1 {c} sep p = rewrite sym (orFalseNeutral c) in
-                              sepBy1 sep p <* optional sep
+                              sepBy1 sep p <* delay c (optional sep)
 
 ||| Parse zero or more instances of `p`, separated by and optionally terminated
 ||| by `sep`. Will not match a separator by itself.
@@ -194,7 +194,7 @@ sepEndBy1' : {c : Bool} ->
              (p : Grammar tok c a) ->
              Grammar tok c (xs : List a ** NonEmpty xs)
 sepEndBy1' {c} sep p = rewrite sym (orFalseNeutral c) in
-                               sepBy1' sep p <* optional sep
+                               sepBy1' sep p <* delay c (optional sep)
 
 ||| Parse one or more instances of `p`, separated and terminated by `sep`.
 endBy1 : {c : Bool} ->
@@ -202,7 +202,7 @@ endBy1 : {c : Bool} ->
          (p : Grammar tok c a) ->
          Grammar tok True (List a)
 endBy1 {c} sep p = some $ rewrite sym (orTrueTrue c) in
-                                  p <* sep
+                                  p <* delay c sep
 
 endBy : (sep : Grammar tok True s) ->
         (p : Grammar tok c a) ->
@@ -216,7 +216,7 @@ endBy1' : {c : Bool} ->
           (p : Grammar tok c a) ->
           Grammar tok True (xs : List a ** NonEmpty xs)
 endBy1' {c} sep p = some' $ rewrite sym (orTrueTrue c) in
-                                    p <* sep
+                                    p <* delay c sep
 
 ||| Parse an instance of `p` that is between `left` and `right`.
 between : (left : Grammar tok True l) ->
