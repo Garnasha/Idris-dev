@@ -24,6 +24,8 @@ data Grammar : (tok : Type) -> (consumes : Bool) -> Type -> Type where
 
      SeqEat : Grammar tok True a -> Inf (a -> Grammar tok c2 b) ->
               Grammar tok True b
+     AppEat : Grammar tok True (a -> b) -> Inf (Grammar tok c2 a) ->
+              Grammar tok True b
      SeqEmpty : {c1, c2 : Bool} ->
                 Grammar tok c1 a -> (a -> Grammar tok c2 b) ->
                 Grammar tok (c1 || c2) b
@@ -77,6 +79,8 @@ Functor (Grammar tok c) where
   map f (Alt x y)    = Alt (map f x) (map f y)
   map f (SeqEat act next)
       = SeqEat act (\val => map f (next val))
+  map f (AppEat act next)
+      = AppEat (map (f .) act) next
   map f (SeqEmpty act next)
       = SeqEmpty act (\val => map f (next val))
   -- The remaining constructors (NextIs, EOF, Commit) have a fixed type,
@@ -120,6 +124,7 @@ mapToken f EOF = EOF
 mapToken f (Fail msg) = Fail msg
 mapToken f Commit = Commit
 mapToken f (SeqEat act next) = SeqEat (mapToken f act) (\x => mapToken f (next x))
+mapToken f (AppEat act next) = AppEat (mapToken f act) (mapToken f next)
 mapToken f (SeqEmpty act next) = SeqEmpty (mapToken f act) (\x => mapToken f (next x))
 mapToken f (Alt x y) = Alt (mapToken f x) (mapToken f y)
 
@@ -245,10 +250,24 @@ doParse com xs act with (sizeAccessible xs)
                 NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
                      rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
                              NonEmptyRes com' val more'
+  doParse com xs (AppEat act next) | sml with (doParse com xs act | sml)
+    doParse com xs (AppEat act next) | sml | Failure com' msg ts
+         = Failure com' msg ts -- We could still try parse next, but don't want to
+    doParse com (x :: (ys ++ more)) (AppEat act next) | (Access morerec) | (NonEmptyRes com' f more)
+         = case doParse com' more next | morerec _ (shorter more ys) of
+                Failure com' msg ts => Failure com' msg ts
+                EmptyRes com' val _ => NonEmptyRes com' (f val) more
+                NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
+                     rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
+                             NonEmptyRes com' (f val) more'
   -- This next line is not strictly necessary, but it stops the coverage
   -- checker taking a really long time and eating lots of memory...
   doParse _ _ _ | sml = Failure True "Help the coverage checker!" []
 
+--   SeqEat : Grammar tok True a -> Inf (a -> Grammar tok c2 b) ->
+--            Grammar tok True b
+--   AppEat : Grammar tok True (a -> b) -> Inf (Grammar tok c2 a) ->
+--            Grammar tok True b
 public export
 data ParseError tok = Error String (List tok)
 
