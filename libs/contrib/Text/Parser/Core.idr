@@ -186,68 +186,128 @@ shorter : (more : List tok) -> .(ys : List tok) ->
 shorter more [] = lteRefl
 shorter more (x :: xs) = LTESucc (lteSuccLeft (shorter more xs))
 
-doParse : {c : Bool} ->
-          (commit : Bool) -> (xs : List tok) -> (act : Grammar tok c ty) ->
+doParse' : {c : Bool} ->
+          (xs : List tok) -> (sml : SizeAccessible xs) -> (commit : Bool) -> (act : Grammar tok c ty) ->
           ParseResult xs c ty
-doParse com xs act with (sizeAccessible xs)
-  doParse com xs (Empty val) | sml = EmptyRes com val xs
-  doParse com [] (Fail str) | sml = Failure com str []
-  doParse com (x :: xs) (Fail str) | sml = Failure com str (x :: xs)
-  doParse com xs Commit | sml = EmptyRes True () xs
+doParse' xs sml com (Empty val) = EmptyRes com val xs
+doParse' [] sml com (Fail str) = Failure com str []
+doParse' (x :: xs) sml com (Fail str) = Failure com str (x :: xs)
+doParse' xs sml com Commit = EmptyRes True () xs
 
-  doParse com [] (Terminal f) | sml = Failure com "End of input" []
-  doParse com (x :: xs) (Terminal f) | sml
-        = maybe
+doParse' [] sml com (Terminal f) = Failure com "End of input" []
+doParse' (x :: xs) sml com (Terminal f) = maybe
              (Failure com "Unrecognised token" (x :: xs))
              (\a => NonEmptyRes com {xs=[]} a xs)
              (f x)
-  doParse com [] EOF | sml = EmptyRes com () []
-  doParse com (x :: xs) EOF | sml
-        = Failure com "Expected end of input" (x :: xs)
-  doParse com [] (NextIs f) | sml = Failure com "End of input" []
-  doParse com (x :: xs) (NextIs f) | sml
-        = if f x
-             then EmptyRes com x (x :: xs)
-             else Failure com "Unrecognised token" (x :: xs)
-  doParse com xs (Alt x y) | sml with (doParse False xs x | sml)
-    doParse com xs (Alt x y) | sml | Failure com' msg ts
-          = if com' -- If the alternative had committed, don't try the
-                    -- other branch (and reset commit flag)
-               then Failure com msg ts
-               else weakenRes com (doParse False xs y | sml)
-    -- Successfully parsed the first option, so use the outer commit flag
-    doParse com xs (Alt x y) | sml | (EmptyRes _ val xs)
-          = EmptyRes com val xs
-    doParse com (z :: (ys ++ more)) (Alt x y) | sml | (NonEmptyRes _ val more)
-          = NonEmptyRes com val more
-  doParse com xs (SeqEmpty act next) | (Access morerec)
-          = case doParse com xs act | Access morerec of
-                 Failure com msg ts => Failure com msg ts
-                 EmptyRes com val xs =>
-                       case doParse com xs (next val) | (Access morerec) of
-                            Failure com' msg ts => Failure com' msg ts
-                            EmptyRes com' val xs => EmptyRes com' val xs
-                            NonEmptyRes com' val more => NonEmptyRes com' val more
-                 NonEmptyRes {x} {xs=ys} com val more =>
-                       case (doParse com more (next val) | morerec _ (shorter more ys)) of
-                            Failure com' msg ts => Failure com' msg ts
-                            EmptyRes com' val _ => NonEmptyRes com' val more
-                            NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
-                                 rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
-                                         NonEmptyRes com' val more'
-  doParse com xs (SeqEat act next) | sml with (doParse com xs act | sml)
-    doParse com xs (SeqEat act next) | sml | Failure com' msg ts
-         = Failure com' msg ts
-    doParse com (x :: (ys ++ more)) (SeqEat act next) | (Access morerec) | (NonEmptyRes com' val more)
-         = case doParse com' more (next val) | morerec _ (shorter more ys) of
-                Failure com' msg ts => Failure com' msg ts
-                EmptyRes com' val _ => NonEmptyRes com' val more
-                NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
-                     rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
-                             NonEmptyRes com' val more'
-  -- This next line is not strictly necessary, but it stops the coverage
-  -- checker taking a really long time and eating lots of memory...
-  doParse _ _ _ | sml = Failure True "Help the coverage checker!" []
+doParse' [] sml com EOF = EmptyRes com () []
+doParse' (x :: xs) sml com EOF = Failure com "Expected end of input" (x :: xs)
+doParse' [] sml com (NextIs f) = Failure com "End of input" []
+doParse' (x :: xs) sml com (NextIs f) = if f x
+           then EmptyRes com x (x :: xs)
+           else Failure com "Unrecognised token" (x :: xs)
+doParse' xs sml com (Alt x y) with (doParse' xs sml False x)
+  doParse' xs sml com (Alt x y) | Failure com' msg ts
+        = if com' -- If the alternative had committed, don't try the
+                  -- other branch (and reset commit flag)
+             then Failure com msg ts
+             else weakenRes com (doParse' xs sml False y)
+  -- Successfully parsed the first option, so use the outer commit flag
+  doParse' xs sml com (Alt x y) | (EmptyRes _ val xs)
+        = EmptyRes com val xs
+  doParse' (z :: (ys ++ more)) sml com (Alt x y) | (NonEmptyRes _ val more)
+        = NonEmptyRes com val more
+doParse' xs (Access morerec) com (SeqEmpty act next)
+        = case doParse' xs (Access morerec) com act of
+               Failure com msg ts => Failure com msg ts
+               EmptyRes com val xs =>
+                     case doParse' xs (Access morerec) com (next val) of
+                          Failure com' msg ts => Failure com' msg ts
+                          EmptyRes com' val xs => EmptyRes com' val xs
+                          NonEmptyRes com' val more => NonEmptyRes com' val more
+               NonEmptyRes {x} {xs=ys} com val more =>
+                     case (doParse' more (morerec _ (shorter more ys)) com (next val)) of
+                          Failure com' msg ts => Failure com' msg ts
+                          EmptyRes com' val _ => NonEmptyRes com' val more
+                          NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
+                               rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
+                                       NonEmptyRes com' val more'
+doParse' xs sml com (SeqEat act next) with (doParse' xs sml com act)
+  doParse' xs sml com (SeqEat act next) | Failure com' msg ts
+       = Failure com' msg ts
+  doParse' (x :: (ys ++ more)) (Access morerec) com (SeqEat act next) | (NonEmptyRes com' val more)
+       = case doParse' more (morerec _ (shorter more ys)) com' (next val) of
+              Failure com' msg ts => Failure com' msg ts
+              EmptyRes com' val _ => NonEmptyRes com' val more
+              NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
+                   rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
+                           NonEmptyRes com' val more'
+-- This next line is not strictly necessary, but it stops the coverage
+-- checker taking a really long time and eating lots of memory...
+doParse' xs fml com act = Failure True "Help the coverage checker!" []
+
+doParse : {c : Bool} ->
+          (commit : Bool) -> (xs : List tok) -> (act : Grammar tok c ty) ->
+          ParseResult xs c ty
+doParse com xs act = doParse' xs (sizeAccessible xs) com act
+--doParse com xs act with (sizeAccessible xs)
+--  doParse com xs (Empty val) | sml = EmptyRes com val xs
+--  doParse com [] (Fail str) | sml = Failure com str []
+--  doParse com (x :: xs) (Fail str) | sml = Failure com str (x :: xs)
+--  doParse com xs Commit | sml = EmptyRes True () xs
+--
+--  doParse com [] (Terminal f) | sml = Failure com "End of input" []
+--  doParse com (x :: xs) (Terminal f) | sml
+--        = maybe
+--             (Failure com "Unrecognised token" (x :: xs))
+--             (\a => NonEmptyRes com {xs=[]} a xs)
+--             (f x)
+--  doParse com [] EOF | sml = EmptyRes com () []
+--  doParse com (x :: xs) EOF | sml
+--        = Failure com "Expected end of input" (x :: xs)
+--  doParse com [] (NextIs f) | sml = Failure com "End of input" []
+--  doParse com (x :: xs) (NextIs f) | sml
+--        = if f x
+--             then EmptyRes com x (x :: xs)
+--             else Failure com "Unrecognised token" (x :: xs)
+--  doParse com xs (Alt x y) | sml with (doParse False xs x | sml)
+--    doParse com xs (Alt x y) | sml | Failure com' msg ts
+--          = if com' -- If the alternative had committed, don't try the
+--                    -- other branch (and reset commit flag)
+--               then Failure com msg ts
+--               else weakenRes com (doParse False xs y | sml)
+--    -- Successfully parsed the first option, so use the outer commit flag
+--    doParse com xs (Alt x y) | sml | (EmptyRes _ val xs)
+--          = EmptyRes com val xs
+--    doParse com (z :: (ys ++ more)) (Alt x y) | sml | (NonEmptyRes _ val more)
+--          = NonEmptyRes com val more
+--  doParse com xs (SeqEmpty act next) | (Access morerec)
+--          = case doParse com xs act | Access morerec of
+--                 Failure com msg ts => Failure com msg ts
+--                 EmptyRes com val xs =>
+--                       case doParse com xs (next val) | (Access morerec) of
+--                            Failure com' msg ts => Failure com' msg ts
+--                            EmptyRes com' val xs => EmptyRes com' val xs
+--                            NonEmptyRes com' val more => NonEmptyRes com' val more
+--                 NonEmptyRes {x} {xs=ys} com val more =>
+--                       case (doParse com more (next val) | morerec _ (shorter more ys)) of
+--                            Failure com' msg ts => Failure com' msg ts
+--                            EmptyRes com' val _ => NonEmptyRes com' val more
+--                            NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
+--                                 rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
+--                                         NonEmptyRes com' val more'
+--  doParse com xs (SeqEat act next) | sml with (doParse com xs act | sml)
+--    doParse com xs (SeqEat act next) | sml | Failure com' msg ts
+--         = Failure com' msg ts
+--    doParse com (x :: (ys ++ more)) (SeqEat act next) | (Access morerec) | (NonEmptyRes com' val more)
+--         = case doParse com' more (next val) | morerec _ (shorter more ys) of
+--                Failure com' msg ts => Failure com' msg ts
+--                EmptyRes com' val _ => NonEmptyRes com' val more
+--                NonEmptyRes {x=x1} {xs=xs1} com' val more' =>
+--                     rewrite appendAssociative (x :: ys) (x1 :: xs1) more' in
+--                             NonEmptyRes com' val more'
+--  -- This next line is not strictly necessary, but it stops the coverage
+--  -- checker taking a really long time and eating lots of memory...
+--  doParse _ _ _ | sml = Failure True "Help the coverage checker!" []
 
 public export
 data ParseError tok = Error String (List tok)
