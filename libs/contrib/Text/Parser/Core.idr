@@ -190,10 +190,8 @@ doParse' : {c : Bool} ->
           (xs : List tok) -> (sml : SizeAccessible xs) -> (commit : Bool) -> (act : Grammar tok c ty) ->
           ParseResult xs c ty
 doParse' xs sml com (Empty val) = EmptyRes com val xs
-doParse' [] sml com (Fail str) = Failure com str []
-doParse' (x :: xs) sml com (Fail str) = Failure com str (x :: xs)
-doParse' xs sml com Commit = EmptyRes True () xs
-
+doParse' xs sml com (Fail str) = Failure com str xs
+doParse' xs sml com Commit = EmptyRes True () xs 
 doParse' [] sml com (Terminal f) = Failure com "End of input" []
 doParse' (x :: xs) sml com (Terminal f) = maybe
              (Failure com "Unrecognised token" (x :: xs))
@@ -219,11 +217,8 @@ doParse' xs sml com (Alt x y) with (doParse' xs sml False x)
 doParse' xs (Access morerec) com (SeqEmpty act next)
         = case doParse' xs (Access morerec) com act of
                Failure com msg ts => Failure com msg ts
-               EmptyRes com val xs =>
-                     case doParse' xs (Access morerec) com (next val) of
-                          Failure com' msg ts => Failure com' msg ts
-                          EmptyRes com' val xs => EmptyRes com' val xs
-                          NonEmptyRes com' val more => NonEmptyRes com' val more
+               EmptyRes com val xs => 
+                     doParse' xs (Access morerec) com (next val)
                NonEmptyRes {x} {xs=ys} com val more =>
                      case (doParse' more (morerec _ (shorter more ys)) com (next val)) of
                           Failure com' msg ts => Failure com' msg ts
@@ -243,7 +238,7 @@ doParse' xs sml com (SeqEat act next) with (doParse' xs sml com act)
                            NonEmptyRes com' val more'
 -- This next line is not strictly necessary, but it stops the coverage
 -- checker taking a really long time and eating lots of memory...
-doParse' xs fml com act = Failure True "Help the coverage checker!" []
+doParse' xs sml com act = Failure True "Help the coverage checker!" []
 
 doParse : {c : Bool} ->
           (commit : Bool) -> (xs : List tok) -> (act : Grammar tok c ty) ->
